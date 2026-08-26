@@ -29,3 +29,6 @@ venv/
 # Datos personales
 entrada/
 salida/
+
+prendelatele.*
+*.http
