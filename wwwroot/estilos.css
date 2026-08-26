@@ -1,0 +1,404 @@
+:root {
+    --fondo: #070b16;
+    --fondo-2: #0d1426;
+    --panel: #111a30;
+    --panel-borde: #1e2b4a;
+    --acento: #56b6ff;
+    --acento-tenue: #2a4a6e;
+    --texto: #e6ecf7;
+    --texto-tenue: #8493ad;
+    --burbuja-nico: #1c3a5e;
+    --burbuja-edith: #131c33;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background:
+        radial-gradient(1200px 600px at 50% -10%, #12213d 0%, transparent 60%),
+        var(--fondo);
+    color: var(--texto);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---------- TOPBAR ---------- */
+#topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    z-index: 20;
+}
+
+#boton-menu, #boton-mute {
+    width: 42px; height: 42px;
+    border: 1px solid var(--panel-borde);
+    background: rgba(17, 26, 48, 0.6);
+    backdrop-filter: blur(8px);
+    color: var(--texto);
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    transition: border-color .2s, background .2s;
+}
+#boton-menu:hover, #boton-mute:hover { border-color: var(--acento); }
+#boton-mute svg { width: 20px; height: 20px; }
+#boton-mute .tacho { opacity: 0; transition: opacity .2s; }
+#boton-mute.muteado { color: var(--texto-tenue); }
+#boton-mute.muteado .onda { opacity: 0; }
+#boton-mute.muteado .tacho { opacity: 1; }
+
+/* ---------- MENÚ LATERAL ---------- */
+#menu-lateral {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 280px;
+    background: var(--fondo-2);
+    border-right: 1px solid var(--panel-borde);
+    transform: translateX(-100%);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    padding: 22px 16px;
+}
+#menu-lateral.abierto { transform: translateX(0); }
+
+.menu-header { padding: 6px 8px 20px; }
+.menu-logo {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    letter-spacing: .18em;
+    color: var(--acento);
+    font-size: 1.1rem;
+}
+.menu-nav { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.menu-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 12px;
+    border-radius: 10px;
+    color: var(--texto);
+    background: transparent;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: .95rem;
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+    transition: background .15s;
+}
+.menu-item:hover:not(.disabled) { background: var(--panel); }
+.menu-item-icon {
+    width: 22px; text-align: center;
+    color: var(--acento);
+    font-size: 1.05rem;
+}
+.menu-item.disabled { color: var(--texto-tenue); cursor: default; }
+.menu-item.disabled .menu-item-icon { color: var(--acento-tenue); }
+.menu-seccion {
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .15em;
+    color: var(--texto-tenue);
+    padding: 18px 12px 6px;
+}
+.menu-footer {
+    font-size: .78rem;
+    color: var(--texto-tenue);
+    padding: 12px;
+    border-top: 1px solid var(--panel-borde);
+    letter-spacing: .04em;
+}
+
+#overlay {
+    position: fixed; inset: 0;
+    background: rgba(3, 6, 14, 0.6);
+    backdrop-filter: blur(2px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .28s;
+    z-index: 30;
+}
+#overlay.visible { opacity: 1; pointer-events: auto; }
+
+/* ---------- ESCENARIO ---------- */
+#escenario {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 60px 20px 20px;
+}
+
+/* Estado inicial: hero centrado */
+#escenario.inicio {
+    align-items: center;
+    justify-content: center;
+}
+#hero {
+    text-align: center;
+    transition: opacity .4s, transform .4s;
+}
+#titulo {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    letter-spacing: .3em;
+    font-size: clamp(2rem, 7vw, 3.4rem);
+    background: linear-gradient(180deg, #ffffff, var(--acento));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+#subtitulo {
+    margin-top: 10px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: .82rem;
+    letter-spacing: .32em;
+    text-transform: uppercase;
+    color: var(--texto-tenue);
+}
+
+/* Cuando arranca la conversación, se oculta el hero */
+#escenario.conversando #hero { display: none; }
+#escenario.conversando {
+    align-items: stretch;
+    justify-content: flex-start;
+}
+
+/* ---------- CONVERSACIÓN ---------- */
+#conversacion {
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.msg {
+    max-width: 78%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    line-height: 1.5;
+    font-size: 1rem;
+    animation: aparecer .25s ease;
+}
+@keyframes aparecer {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.msg.nico {
+    align-self: flex-end;
+    background: var(--burbuja-nico);
+    border: 1px solid #274b73;
+    border-bottom-right-radius: 4px;
+}
+.msg.edith {
+    align-self: flex-start;
+    background: var(--burbuja-edith);
+    border: 1px solid var(--panel-borde);
+    border-bottom-left-radius: 4px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 400;
+}
+.msg.edith .cursor {
+    display: inline-block;
+    width: 7px; height: 1.05em;
+    background: var(--acento);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: parpadeo .9s steps(2) infinite;
+}
+@keyframes parpadeo { 50% { opacity: 0; } }
+
+/* ---------- BARRA DE ENTRADA ---------- */
+#barra-entrada {
+    padding: 12px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+.barra-inner {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    width: 100%;
+    max-width: 720px;
+    background: var(--panel);
+    border: 1px solid var(--panel-borde);
+    border-radius: 26px;
+    padding: 7px 7px 7px 20px;
+    transition: border-color .2s;
+}
+.barra-inner:focus-within { border-color: var(--acento); }
+#campo-texto {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--texto);
+    font-family: 'Inter', sans-serif;
+    font-size: 1rem;
+    line-height: 1.45;
+    resize: none;
+    max-height: 160px;
+    overflow-y: auto;
+    padding: 9px 0;
+    scrollbar-width: thin;
+}
+#campo-texto::placeholder { color: var(--texto-tenue); }
+
+#boton-enviar, #boton-mic {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all .25s;
+}
+#boton-enviar { background: var(--acento); color: #05101f; }
+#boton-enviar:hover { filter: brightness(1.12); }
+#boton-enviar svg { width: 20px; height: 20px; }
+
+#boton-mic { background: #1a2440; color: var(--acento); }
+#boton-mic svg { width: 20px; height: 20px; }
+#boton-mic.escuchando {
+    background: var(--acento); color: #05101f;
+    animation: pulso 1.2s ease-in-out infinite;
+}
+@keyframes pulso {
+    0%,100% { box-shadow: 0 0 0 0 rgba(86,182,255,.45); }
+    50% { box-shadow: 0 0 0 12px rgba(86,182,255,0); }
+}
+#boton-mic.procesando { background: #1a2440; color: var(--acento); }
+#boton-mic.procesando svg { animation: girar 1s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+#boton-mic.respondiendo { background: #143a2c; color: #63f5b0; }
+
+#estado {
+    font-size: .8rem;
+    color: var(--texto-tenue);
+    letter-spacing: .04em;
+    min-height: 1rem;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+}
+#lista-conversaciones {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+}
+.conv-item {
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--texto);
+    font-family: 'Inter', sans-serif;
+    font-size: .9rem;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background .15s;
+}
+.conv-item:hover { background: var(--panel); }
+.menu-vacio {
+    color: var(--texto-tenue);
+    font-size: .82rem;
+    padding: 10px 12px;
+}
+
+.cargando {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--texto-tenue);
+}
+.spinner {
+    width: 15px;
+    height: 15px;
+    border: 2px solid var(--panel-borde);
+    border-top-color: var(--acento);
+    border-radius: 50%;
+    animation: girar-spinner .7s linear infinite;
+    flex-shrink: 0;
+}
+@keyframes girar-spinner { to { transform: rotate(360deg); } }
+.texto-paso { animation: aparecer-paso .3s ease; }
+@keyframes aparecer-paso { from { opacity: 0; } to { opacity: 1; } }
+
+/* ====== AJUSTES RESPONSIVE PARA CELULAR ====== */
+@media (max-width: 600px) {
+    /* Respetar el área segura del celular (notch arriba, barra de gestos abajo) */
+    #topbar {
+        padding-top: env(safe-area-inset-top, 0);
+        height: calc(60px + env(safe-area-inset-top, 0));
+    }
+
+    /* Burbujas más anchas para aprovechar la pantalla angosta */
+    .msg {
+        max-width: 88%;
+        font-size: 1.02rem;
+    }
+
+    /* Título un poco más chico y más arriba en móvil */
+    #titulo {
+        font-size: clamp(1.8rem, 9vw, 2.6rem);
+        letter-spacing: .22em;
+    }
+    #subtitulo {
+        font-size: .72rem;
+        letter-spacing: .24em;
+    }
+
+    /* Conversación usa casi todo el ancho */
+    #conversacion {
+        max-width: 100%;
+        padding: 0 4px;
+    }
+
+    /* Barra de entrada más cómoda para el dedo y respetando la barra de gestos */
+    #barra-entrada {
+        padding: 10px 12px calc(16px + env(safe-area-inset-bottom, 0));
+    }
+    .barra-inner {
+        max-width: 100%;
+    }
+
+    /* Botones táctiles cómodos (mínimo 44px es lo recomendado) */
+    #boton-enviar, #boton-mic {
+        width: 46px;
+        height: 46px;
+    }
+    #boton-menu, #boton-mute {
+        width: 46px;
+        height: 46px;
+    }
+
+    /* Menú lateral un poco más angosto en móvil */
+    #menu-lateral {
+        width: 82%;
+        max-width: 300px;
+    }
+
+    /* El escenario aprovecha mejor el alto */
+    #escenario {
+        padding: 66px 12px 12px;
+    }
+}

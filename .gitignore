@@ -1,0 +1,31 @@
+# Secretos
+.env
+.cache
+appsettings.Development.json
+
+# Perfil de navegador (cookies y sesiones)
+perfil_netflix/
+
+# Modelo de voz (111 MB, se descarga aparte)
+*.onnx
+
+# Compilacion .NET
+bin/
+obj/
+
+# Python
+__pycache__/
+venv/
+.venv/
+
+# Audio y video generados en runtime
+*.wav
+*.mp3
+*.mp4
+*.srt
+*.vtt
+*.tsv
+
+# Datos personales
+entrada/
+salida/

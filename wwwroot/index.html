@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Edith</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="estilos.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#070b16">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Edith">
+    <link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+    <!-- Menú lateral -->
+    <aside id="menu-lateral">
+        <div class="menu-header">
+            <span class="menu-logo">E.D.I.T.H.</span>
+        </div>
+        <nav class="menu-nav">
+            <button class="menu-item" onclick="nuevaConversacion()">
+                <span class="menu-item-icon">+</span> Nueva conversación
+            </button>
+            <div class="menu-seccion">Tus charlas</div>
+            <div id="lista-conversaciones">
+            <div class="menu-vacio">Cargando…</div>
+            </div>
+        </nav>
+        <div class="menu-footer">Asistente personal · v1</div>
+    </aside>
+    <div id="overlay" onclick="cerrarMenu()"></div>
+
+    <!-- Barra superior -->
+    <header id="topbar">
+        <button id="boton-menu" onclick="abrirMenu()" aria-label="Abrir menú">☰</button>
+        <button id="boton-mute" onclick="toggleMute()" aria-label="Silenciar voz">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path class="onda" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                <path class="onda" d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                <line class="tacho" x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+        </button>
+    </header>
+
+    <!-- Zona principal -->
+    <main id="escenario" class="inicio">
+        <div id="hero">
+            <h1 id="titulo">E.D.I.T.H.</h1>
+            <p id="subtitulo">Even Dead, I'm The Helper</p>
+        </div>
+
+        <div id="conversacion"></div>
+    </main>
+
+    <!-- Barra de entrada -->
+    <div id="barra-entrada">
+        <div class="barra-inner">
+            <textarea id="campo-texto" placeholder="Escribile a Edith…" rows="1" autocomplete="off"></textarea>
+            <button id="boton-enviar" onclick="enviarTexto()" aria-label="Enviar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
+                </svg>
+            </button>
+            <button id="boton-mic" onclick="toggleGrabar()" aria-label="Hablar">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+                    <path d="M17 11a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11h-2z"/>
+                </svg>
+            </button>
+        </div>
+        <div id="estado">Escribí o tocá el micrófono para empezar</div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
