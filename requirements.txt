@@ -1,0 +1,16 @@
+# Dependencias completas para correr Edith en tu PC (uso personal).
+# Para la demo pública se usa requirements-demo.txt (mucho más liviano).
+flask
+flask-cors
+python-dotenv
+google-genai
+psycopg2-binary
+edge-tts
+requests
+spotipy
+playwright
+openai-whisper
+soundfile
+elevenlabs
+pandas
+openpyxl

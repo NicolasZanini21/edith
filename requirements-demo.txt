@@ -1,0 +1,11 @@
+# Dependencias mínimas para la demo pública (EDITH_DEMO=true).
+# Sin whisper/torch, spotipy ni playwright: eso es lo que permite
+# que corra en el plan gratuito de Render.
+flask
+flask-cors
+python-dotenv
+google-genai
+psycopg2-binary
+edge-tts
+requests
+gunicorn

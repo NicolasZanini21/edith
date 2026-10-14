@@ -1,38 +1,42 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Modo demo pública: desactiva Netflix, Spotify, Excel y la entrada por voz
+# (Whisper pesa demasiado para un hosting gratuito), y usa un prompt de
+# personalidad genérico en vez de asumir que el usuario es Nico.
+DEMO = os.getenv("EDITH_DEMO", "false").strip().lower() == "true"
+
 import psycopg2
-import sys
-import whisper
 import requests
-import subprocess
-import soundfile as sf
 from flask import Flask, request, send_file
 from flask_cors import CORS
 from google import genai
-from dotenv import load_dotenv
-import os
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
 from urllib.parse import quote
 from datetime import date
 import asyncio
 import edge_tts
-from elevenlabs.client import ElevenLabs
-import pandas as pd
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
-import glob
-from playwright.sync_api import sync_playwright
-import time
 
-load_dotenv()
 cliente_gemini = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-spotify = spotipy.Spotify(auth_manager=SpotifyOAuth(
-    client_id=os.getenv("SPOTIFY_CLIENT_ID"),
-    client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
-    redirect_uri="http://127.0.0.1:8888/callback",
-    scope="user-modify-playback-state user-read-playback-state"
-))
-cliente_elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+
+# Spotify solo se inicializa fuera de la demo: necesita OAuth real y
+# controla tu cuenta personal, no tiene sentido (ni es seguro) en público.
+spotify = None
+if not DEMO:
+    import spotipy
+    from spotipy.oauth2 import SpotifyOAuth
+    spotify = spotipy.Spotify(auth_manager=SpotifyOAuth(
+        client_id=os.getenv("SPOTIFY_CLIENT_ID"),
+        client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
+        redirect_uri="http://127.0.0.1:8888/callback",
+        scope="user-modify-playback-state user-read-playback-state"
+    ))
+
+cliente_elevenlabs = None
+if not DEMO and os.getenv("ELEVENLABS_API_KEY"):
+    from elevenlabs.client import ElevenLabs
+    cliente_elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
 
 
 def conectar_db():
@@ -78,12 +82,8 @@ def marcar_recordado(id_evento):
     cursor.close()
     conexion.close()
 
-    
 
-    
-
-def conversar(texto_usuario, historial=""):
-    prompt = f"""Sos Edith, la asistente personal y compañera de Nico. No sos un asistente genérico: sos como una amiga cercana que vive con él.
+PROMPT_PERSONAL = """Sos Edith, la asistente personal y compañera de Nico. No sos un asistente genérico: sos como una amiga cercana que vive con él.
 
 TU PERSONALIDAD:
 - Sos cálida, cercana y tranquila. Hablás en español rioplatense, de "vos", con naturalidad argentina.
@@ -109,6 +109,30 @@ CONVERSACIÓN HASTA AHORA:
 Último mensaje de Nico: "{texto_usuario}"
 
 Respondé como Edith, siguiendo el hilo:"""
+
+PROMPT_DEMO = """Sos Edith, una asistente de inteligencia artificial con personalidad propia. Hablás en español rioplatense, de "vos", con naturalidad argentina. Sos cálida, con onda, y tenés humor propio, no sos neutra ni fría.
+
+Esta es una DEMO PÚBLICA de tu creador para que la gente te conozca. No sabés el nombre de quien te escribe todavía. Si abajo en el historial no aparece que ya te lo dijo, preguntaselo de entrada con naturalidad, antes de seguir charlando (por ejemplo: "Antes que nada, ¿cómo te llamás?"). Una vez que te lo diga, usalo en la charla.
+
+LÍMITES IMPORTANTES:
+- No sos terapeuta ni médica. Si alguien te cuenta algo serio, acompañalo con cariño pero sugerile con suavidad que hable con alguien de confianza o un profesional.
+- Nunca finjas ser humana. Sos Edith, una IA, y está bien serlo.
+- Esta es una demo: si te preguntan, podés contar que en tu versión real también controlás Spotify, buscás en Netflix y procesás archivos, pero esas funciones están desactivadas acá por ser una demo pública.
+
+MUY IMPORTANTE - EL HILO DE LA CHARLA:
+- Abajo está la conversación hasta ahora. USALA. No saludes de nuevo si ya se saludaron. Seguí el hilo.
+
+CONVERSACIÓN HASTA AHORA:
+{historial}
+
+Último mensaje: "{texto_usuario}"
+
+Respondé como Edith, siguiendo el hilo:"""
+
+
+def conversar(texto_usuario, historial=""):
+    plantilla = PROMPT_DEMO if DEMO else PROMPT_PERSONAL
+    prompt = plantilla.format(historial=historial, texto_usuario=texto_usuario)
 
     respuesta = cliente_gemini.models.generate_content(
         model="gemini-flash-lite-latest",
@@ -144,7 +168,7 @@ def obtener_conversacion(id_conv):
     fila = cursor.fetchone()
     cursor.close()
     conexion.close()
-    return fila[0] if fila else None    
+    return fila[0] if fila else None
 
 def detectar_intencion(texto_usuario):
     prompt = f"""Analizá lo que dijo el usuario y clasificá su intención.
@@ -201,10 +225,16 @@ Respuesta:"""
 app = Flask(__name__, static_folder="wwwroot", static_url_path="")
 CORS(app)
 
-# Cargamos Whisper una sola vez, al arrancar (así no lo recarga en cada pedido)
-print("Cargando Whisper...")
-modelo = whisper.load_model("small")
-print("Listo. Edith esperando...")
+# Whisper (reconocimiento de voz) solo se carga fuera de la demo: el modelo
+# necesita más memoria RAM de la que da un hosting gratuito.
+modelo = None
+if not DEMO:
+    import whisper
+    print("Cargando Whisper...")
+    modelo = whisper.load_model("small")
+    print("Listo. Edith esperando...")
+else:
+    print("Modo demo: reconocimiento de voz desactivado. Edith esperando...")
 
 def generar_voz(texto):
     async def _generar():
@@ -213,6 +243,7 @@ def generar_voz(texto):
     asyncio.run(_generar())
 
 def abrir_spotify():
+    import subprocess
     subprocess.Popen("spotify")
 
 def reproducir_cancion(nombre_cancion):
@@ -255,6 +286,8 @@ def reproducir_cancion(nombre_cancion):
 
 
 def buscar_en_netflix(termino, nombre_perfil="ZANINI"):
+    from playwright.sync_api import sync_playwright
+    import time
     try:
         with sync_playwright() as p:
             contexto = p.chromium.launch_persistent_context(
@@ -320,6 +353,12 @@ Término:"""
 
 
 def convertir_a_excel():
+    import pandas as pd
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    import glob
+
     # Buscar el archivo más reciente en la carpeta de entrada
     carpeta_entrada = "entrada"
     carpeta_salida = "salida"
@@ -399,6 +438,9 @@ def procesar_texto(texto, historial= ""):
     intencion = detectar_intencion(texto)
     print("Intención detectada:", intencion)
 
+    if DEMO and intencion in ("MUSICA", "NETFLIX", "EXCEL"):
+        return "Esa función solo está disponible en mi versión personal, no acá en la demo pública. Pero puedo charlar con vos o agendarte un recordatorio, por ejemplo."
+
     if intencion == "MUSICA":
         cancion = extraer_cancion(texto)
         print("Canción pedida:", cancion)
@@ -419,8 +461,8 @@ def procesar_texto(texto, historial= ""):
     elif intencion == "NETFLIX":
         termino = extraer_busqueda_netflix(texto)
         print("Buscando en Netflix:", termino)
-        frase = buscar_en_netflix(termino)    
-        
+        frase = buscar_en_netflix(termino)
+
     elif intencion == "RECORDATORIO":
         datos = extraer_recordatorio(texto)
         print("Recordatorio extraído:", datos)
@@ -432,7 +474,7 @@ def procesar_texto(texto, historial= ""):
             frase = f"Listo, te lo agendo: {descripcion} para el {fecha}."
         except Exception as e:
             print("Error guardando recordatorio:", e)
-            frase = "Perdón, no pude agendar eso. ¿Me lo repetís con la fecha?"   
+            frase = "Perdón, no pude agendar eso. ¿Me lo repetís con la fecha?"
     else:
         print("Es una charla, le pregunto a Gemini...")
         frase = conversar(texto, historial)
@@ -461,6 +503,9 @@ def armar_respuesta(frase):
 
 @app.route("/escuchar", methods=["POST"])
 def escuchar():
+    if DEMO or modelo is None:
+        return armar_respuesta("La entrada por voz no está disponible en esta demo pública, pero escribime en el cuadro de texto y te leo la respuesta igual.")
+
     audio = request.files["audio"]
     audio.save("entrada.wav")
     resultado = modelo.transcribe("entrada.wav", language="Spanish")
@@ -508,4 +553,5 @@ def servir_index():
     return app.send_static_file("index.html")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001)
+    puerto = int(os.getenv("PORT", 5001))
+    app.run(host="0.0.0.0", port=puerto)

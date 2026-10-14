@@ -2,10 +2,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 
-// Cliente HTTP para reenviar pedidos al puente de Python
+// Cliente HTTP para reenviar pedidos al puente de Python.
+// En local apunta a localhost; en producción, a la URL pública del
+// servicio del puente (variable de entorno PUENTE_BASE_URL).
+var puenteBaseUrl = builder.Configuration["PUENTE_BASE_URL"] ?? "http://127.0.0.1:5001";
 builder.Services.AddHttpClient("puente", c =>
 {
-    c.BaseAddress = new Uri("http://127.0.0.1:5001");
+    c.BaseAddress = new Uri(puenteBaseUrl);
     c.Timeout = TimeSpan.FromMinutes(5);
 });
 
