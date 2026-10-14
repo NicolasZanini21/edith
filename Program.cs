@@ -44,8 +44,20 @@ app.Map("/{ruta:regex(^(texto|escuchar|conversaciones|conversacion|guardar_conve
     using var respuesta = await cliente.SendAsync(pedido, HttpCompletionOption.ResponseHeadersRead);
 
     ctx.Response.StatusCode = (int)respuesta.StatusCode;
-    if (respuesta.Content.Headers.ContentType is not null)
-        ctx.Response.ContentType = respuesta.Content.Headers.ContentType.ToString();
+
+    // Reenviar TODOS los headers de la respuesta del puente (no solo
+    // Content-Type): acá viaja X-Respuesta-Texto, que el frontend necesita
+    // para mostrar el texto de lo que dijo Edith.
+    foreach (var header in respuesta.Headers)
+    {
+        if (string.Equals(header.Key, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase))
+            continue;
+        ctx.Response.Headers[header.Key] = header.Value.ToArray();
+    }
+    foreach (var header in respuesta.Content.Headers)
+    {
+        ctx.Response.Headers[header.Key] = header.Value.ToArray();
+    }
 
     await respuesta.Content.CopyToAsync(ctx.Response.Body);
 });
