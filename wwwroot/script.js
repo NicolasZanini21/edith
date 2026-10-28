@@ -205,7 +205,7 @@ function iniciarPasos(texto) {
     scrollAbajo();
 
     function mostrar() {
-        burbujaCargando.innerHTML = '<span class="cargando"><span class="puntos-pensando"><span></span><span></span><span></span></span><span class="texto-paso">' + pasos[idx % pasos.length] + '</span></span>';
+        burbujaCargando.innerHTML = '<span class="cargando"><span class="spinner-pensando"></span><span class="texto-paso">' + pasos[idx % pasos.length] + '</span></span>';
         idx++;
     }
     mostrar();
