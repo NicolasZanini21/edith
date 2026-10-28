@@ -10,6 +10,7 @@ let burbujaCargando = null;
 const escenario = document.getElementById("escenario");
 const conversacion = document.getElementById("conversacion");
 const botonMic = document.getElementById("boton-mic");
+const botonEnviar = document.getElementById("boton-enviar");
 const estado = document.getElementById("estado");
 const campoTexto = document.getElementById("campo-texto");
 const botonMute = document.getElementById("boton-mute");
@@ -204,7 +205,7 @@ function iniciarPasos(texto) {
     scrollAbajo();
 
     function mostrar() {
-        burbujaCargando.innerHTML = '<span class="cargando"><span class="spinner"></span><span class="texto-paso">' + pasos[idx % pasos.length] + '</span></span>';
+        burbujaCargando.innerHTML = '<span class="cargando"><span class="puntos-pensando"><span></span><span></span><span></span></span><span class="texto-paso">' + pasos[idx % pasos.length] + '</span></span>';
         idx++;
     }
     mostrar();
@@ -236,15 +237,15 @@ async function enviarTexto() {
     campoTexto.style.height = "auto";
     agregarMensajeNico(texto);
     iniciarPasos(texto);
-    
+
 
     const formData = new FormData();
     formData.append("texto", texto);
     try {
         const res = await fetch(SERVIDOR + "/texto", { method: "POST", body: formData });
-        
+
         await procesarRespuesta(res);
-        
+
     } catch (err) {
         estado.textContent = "No me pude conectar. ¿Está corriendo el servidor?";
     }
@@ -265,11 +266,25 @@ function ajustarAltura() {
 }
 campoTexto.addEventListener("input", ajustarAltura);
 
-// ---------- RESPUESTA (voz + texto) ----------
+// ---------- RESPUESTA (voz + texto + gráfico opcional) ----------
+function agregarGraficoEdith() {
+    const div = document.createElement("div");
+    div.className = "msg edith";
+    const img = document.createElement("img");
+    img.className = "grafico-chat";
+    img.alt = "Gráfico de gastos";
+    img.src = SERVIDOR + "/grafico?t=" + Date.now(); // evita servir una imagen vieja cacheada
+    div.appendChild(img);
+    conversacion.appendChild(div);
+    scrollAbajo();
+}
+
 async function procesarRespuesta(res) {
     const textoRespuesta = decodeURIComponent(res.headers.get("X-Respuesta-Texto") || "");
+    const hayGrafico = res.headers.get("X-Hay-Grafico") === "true";
     detenerPasos();
     agregarMensajeEdith(textoRespuesta);
+    if (hayGrafico) agregarGraficoEdith();
 
     if (!muteado) {
         const audioBlob = await res.blob();
@@ -326,3 +341,64 @@ if ("serviceWorker" in navigator) {
         });
     });
 }
+
+// ---------- DESPERTAR AL PUENTE (cold start de Render) ----------
+// El puente Flask puede estar dormido por inactividad y tardar hasta ~1
+// minuto en responder. En vez de dejar que el usuario le escriba a ciegas
+// a una pantalla que no reacciona, deshabilitamos el chat hasta confirmar
+// que /salud responde, mostrando por qué está tardando.
+const MENSAJE_INICIO = "Escribí o tocá el micrófono para empezar";
+const MENSAJE_DESPERTANDO = "Despertando a Edith… puede tardar hasta un minuto la primera vez.";
+const MENSAJE_SIN_RESPUESTA = "No pudimos despertar a Edith. Probá refrescar la página en un minuto.";
+const INTERVALO_REINTENTO_MS = 4000;
+const TIEMPO_MAXIMO_MS = 90000;
+
+function fijarChatHabilitado(habilitado) {
+    campoTexto.disabled = !habilitado;
+    botonMic.disabled = !habilitado;
+}
+
+async function consultarSalud() {
+    const controlador = new AbortController();
+    const timeout = setTimeout(() => controlador.abort(), 5000);
+    try {
+        const res = await fetch(SERVIDOR + "/salud", { signal: controlador.signal });
+        if (!res.ok) return null;
+        return await res.json();
+    } catch (err) {
+        return null;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+// ---------- PRESENTACIÓN DE CAPACIDADES ----------
+const capacidades = document.getElementById("capacidades");
+
+function mostrarCapacidades(esDemo) {
+    if (!capacidades) return;
+    capacidades.textContent = esDemo
+        ? "Puedo recordarte eventos o simplemente charlar — Spotify y Netflix están desactivados en esta demo pública."
+        : "Puedo poner música en Spotify, buscarte algo en Netflix, recordarte eventos o simplemente charlar.";
+}
+
+async function despertarEdith() {
+    fijarChatHabilitado(false);
+    estado.textContent = MENSAJE_DESPERTANDO;
+
+    const desde = Date.now();
+    while (Date.now() - desde < TIEMPO_MAXIMO_MS) {
+        const salud = await consultarSalud();
+        if (salud) {
+            fijarChatHabilitado(true);
+            estado.textContent = MENSAJE_INICIO;
+            mostrarCapacidades(!!salud.demo);
+            return;
+        }
+        await new Promise(r => setTimeout(r, INTERVALO_REINTENTO_MS));
+    }
+
+    estado.textContent = MENSAJE_SIN_RESPUESTA;
+}
+
+despertarEdith();
