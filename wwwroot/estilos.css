@@ -9,22 +9,43 @@
     --texto-tenue: #8493ad;
     --burbuja-nico: #1c3a5e;
     --burbuja-edith: #131c33;
+    /* Paleta ampliada: el azul sigue siendo la base, estos dos son para
+       darle variedad y vida en halos, destellos y micro-interacciones,
+       sin reemplazar el look original. */
+    --acento-2: #9b7bff;
+    --acento-3: #3fe8c4;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
     font-family: 'Inter', system-ui, sans-serif;
-    background:
-        radial-gradient(1200px 600px at 50% -10%, #12213d 0%, transparent 60%),
-        var(--fondo);
+    background: var(--fondo);
     color: var(--texto);
     height: 100vh;
     height: 100dvh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    position: relative;
 }
+
+/* Fondo con vida: el mismo resplandor de antes, pero respirando despacio
+   en vez de quedarse fijo. Muy sutil a propósito, no es un efecto de fiesta. */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(1200px 600px at 50% -10%, #12213d 0%, transparent 60%);
+    animation: respirar-fondo 10s ease-in-out infinite;
+}
+@keyframes respirar-fondo {
+    0%, 100% { opacity: 1; transform: scale(1) translateY(0); }
+    50% { opacity: .75; transform: scale(1.06) translateY(1.5%); }
+}
+#topbar, #menu-lateral, #overlay, #escenario, #barra-entrada { position: relative; z-index: 1; }
 
 /* ---------- TOPBAR ---------- */
 #topbar {
@@ -50,7 +71,8 @@ body {
     font-size: 1.2rem;
     transition: border-color .2s, background .2s;
 }
-#boton-menu:hover, #boton-mute:hover { border-color: var(--acento); }
+#boton-menu:hover, #boton-mute:hover { border-color: var(--acento); transform: translateY(-1px); }
+#boton-menu:active, #boton-mute:active { transform: scale(.92); }
 #boton-mute svg { width: 20px; height: 20px; }
 #boton-mute .tacho { opacity: 0; transition: opacity .2s; }
 #boton-mute.muteado { color: var(--texto-tenue); }
@@ -144,18 +166,47 @@ body {
     justify-content: center;
 }
 #hero {
+    position: relative;
     text-align: center;
     transition: opacity .4s, transform .4s;
+}
+/* Halo que respira detrás del título: es lo que le falta a un texto
+   estático para sentirse "presente" en vez de solo impreso en la pantalla. */
+#hero::before {
+    content: "";
+    position: absolute;
+    left: 50%; top: 50%;
+    width: min(500px, 92vw);
+    height: 260px;
+    transform: translate(-50%, -50%);
+    background:
+        radial-gradient(closest-side at 35% 45%, rgba(86,182,255,.8), transparent 68%),
+        radial-gradient(closest-side at 65% 55%, rgba(155,123,255,.7), transparent 68%),
+        radial-gradient(closest-side at 50% 70%, rgba(63,232,196,.55), transparent 68%);
+    filter: blur(22px);
+    opacity: .75;
+    animation: respirar-halo 4.5s ease-in-out infinite;
+    z-index: -1;
+}
+@keyframes respirar-halo {
+    0%, 100% { opacity: .55; transform: translate(-50%, -50%) scale(.92) rotate(0deg); }
+    50% { opacity: 1; transform: translate(-50%, -50%) scale(1.22) rotate(8deg); }
 }
 #titulo {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
     letter-spacing: .3em;
     font-size: clamp(2rem, 7vw, 3.4rem);
-    background: linear-gradient(180deg, #ffffff, var(--acento));
+    background: linear-gradient(120deg, #ffffff, var(--acento), var(--acento-2), var(--acento-3), #ffffff);
+    background-size: 320% 320%;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
+    animation: brillo-titulo 7s ease-in-out infinite;
+}
+@keyframes brillo-titulo {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
 }
 #subtitulo {
     margin-top: 10px;
@@ -163,6 +214,13 @@ body {
     font-size: .82rem;
     letter-spacing: .32em;
     text-transform: uppercase;
+    color: var(--texto-tenue);
+}
+#capacidades {
+    margin-top: 18px;
+    max-width: 380px;
+    font-size: .85rem;
+    line-height: 1.5;
     color: var(--texto-tenue);
 }
 
@@ -188,11 +246,13 @@ body {
     border-radius: 16px;
     line-height: 1.5;
     font-size: 1rem;
-    animation: aparecer .25s ease;
+    animation: aparecer .38s cubic-bezier(.2,.9,.3,1.3);
+    transition: transform .15s ease;
 }
+.msg:hover { transform: translateY(-1px); }
 @keyframes aparecer {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(10px) scale(.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .msg.nico {
     align-self: flex-end;
@@ -207,16 +267,29 @@ body {
     border-bottom-left-radius: 4px;
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 400;
+    box-shadow: 0 0 0 0 rgba(86,182,255,0);
+    animation: aparecer .38s cubic-bezier(.2,.9,.3,1.3), destello-edith 1s ease-out;
+}
+@keyframes destello-edith {
+    0% { box-shadow: 0 0 18px 2px rgba(86,182,255,.25); }
+    100% { box-shadow: 0 0 0 0 rgba(86,182,255,0); }
+}
+.grafico-chat {
+    display: block;
+    max-width: 100%;
+    border-radius: 10px;
 }
 .msg.edith .cursor {
     display: inline-block;
     width: 7px; height: 1.05em;
     background: var(--acento);
+    border-radius: 2px;
     margin-left: 2px;
     vertical-align: text-bottom;
-    animation: parpadeo .9s steps(2) infinite;
+    box-shadow: 0 0 6px 0 var(--acento);
+    animation: parpadeo 1s ease-in-out infinite;
 }
-@keyframes parpadeo { 50% { opacity: 0; } }
+@keyframes parpadeo { 0%, 100% { opacity: 1; } 50% { opacity: .15; } }
 
 /* ---------- BARRA DE ENTRADA ---------- */
 #barra-entrada {
@@ -236,9 +309,9 @@ body {
     border: 1px solid var(--panel-borde);
     border-radius: 26px;
     padding: 7px 7px 7px 20px;
-    transition: border-color .2s;
+    transition: border-color .2s, box-shadow .2s;
 }
-.barra-inner:focus-within { border-color: var(--acento); }
+.barra-inner:focus-within { border-color: var(--acento); box-shadow: 0 0 0 4px rgba(86,182,255,.12); }
 #campo-texto {
     flex: 1;
     background: transparent;
@@ -255,6 +328,8 @@ body {
     scrollbar-width: thin;
 }
 #campo-texto::placeholder { color: var(--texto-tenue); }
+#campo-texto:disabled { opacity: 0.5; cursor: wait; }
+#boton-mic:disabled { opacity: 0.5; cursor: wait; pointer-events: none; }
 
 #boton-enviar, #boton-mic {
     width: 42px; height: 42px;
@@ -265,24 +340,47 @@ body {
     flex-shrink: 0;
     transition: all .25s;
 }
-#boton-enviar { background: var(--acento); color: #05101f; }
-#boton-enviar:hover { filter: brightness(1.12); }
+#boton-enviar { background: var(--acento); color: #05101f; position: relative; overflow: visible; }
+#boton-enviar:hover { filter: brightness(1.12); transform: scale(1.06); }
+#boton-enviar:active { transform: scale(.9); }
 #boton-enviar svg { width: 20px; height: 20px; }
 
-#boton-mic { background: #1a2440; color: var(--acento); }
+/* Ráfaga de chispitas al enviar: puro gusto, no tiene función, está para
+   que mandar un mensaje se sienta un poco más divertido. */
+.chispa {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: disparar-chispa .55s ease-out forwards;
+}
+@keyframes disparar-chispa {
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0); opacity: 0; }
+}
+
+#boton-mic { background: #1a2440; color: var(--acento); animation: respirar-mic 3.2s ease-in-out infinite; }
+#boton-mic:hover { transform: scale(1.06); }
 #boton-mic svg { width: 20px; height: 20px; }
+@keyframes respirar-mic {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(86,182,255,.18); }
+    50% { box-shadow: 0 0 0 6px rgba(86,182,255,0); }
+}
 #boton-mic.escuchando {
-    background: var(--acento); color: #05101f;
-    animation: pulso 1.2s ease-in-out infinite;
+    background: linear-gradient(135deg, var(--acento), var(--acento-2));
+    color: #05101f;
+    animation: pulso 1.4s ease-in-out infinite;
 }
 @keyframes pulso {
-    0%,100% { box-shadow: 0 0 0 0 rgba(86,182,255,.45); }
-    50% { box-shadow: 0 0 0 12px rgba(86,182,255,0); }
+    0% { box-shadow: 0 0 0 0 rgba(86,182,255,.5), 0 0 0 0 rgba(155,123,255,0); }
+    60% { box-shadow: 0 0 0 10px rgba(86,182,255,0), 0 0 0 14px rgba(155,123,255,0); }
+    100% { box-shadow: 0 0 0 0 rgba(86,182,255,0), 0 0 0 0 rgba(155,123,255,0); }
 }
-#boton-mic.procesando { background: #1a2440; color: var(--acento); }
+#boton-mic.procesando { background: #1a2440; color: var(--acento); animation: none; }
 #boton-mic.procesando svg { animation: girar 1s linear infinite; }
 @keyframes girar { to { transform: rotate(360deg); } }
-#boton-mic.respondiendo { background: #143a2c; color: #63f5b0; }
+#boton-mic.respondiendo { background: #143a2c; color: #63f5b0; animation: none; }
 
 #estado {
     font-size: .8rem;
@@ -331,16 +429,25 @@ body {
     gap: 10px;
     color: var(--texto-tenue);
 }
-.spinner {
-    width: 15px;
-    height: 15px;
-    border: 2px solid var(--panel-borde);
-    border-top-color: var(--acento);
-    border-radius: 50%;
-    animation: girar-spinner .7s linear infinite;
+/* Puntitos que laten en ola, en vez de un spinner mecánico: se siente más
+   a "está pensando" que a "cargando una barra de progreso". */
+.puntos-pensando {
+    display: inline-flex;
+    gap: 4px;
     flex-shrink: 0;
 }
-@keyframes girar-spinner { to { transform: rotate(360deg); } }
+.puntos-pensando span {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    animation: latir-punto 1.1s ease-in-out infinite;
+}
+.puntos-pensando span:nth-child(1) { background: var(--acento); }
+.puntos-pensando span:nth-child(2) { background: var(--acento-2); animation-delay: .15s; }
+.puntos-pensando span:nth-child(3) { background: var(--acento-3); animation-delay: .3s; }
+@keyframes latir-punto {
+    0%, 60%, 100% { transform: scale(.6); opacity: .4; }
+    30% { transform: scale(1); opacity: 1; }
+}
 .texto-paso { animation: aparecer-paso .3s ease; }
 @keyframes aparecer-paso { from { opacity: 0; } to { opacity: 1; } }
 
