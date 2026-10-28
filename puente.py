@@ -1,5 +1,6 @@
 import os
 import re
+import hashlib
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -111,6 +112,30 @@ def todos_los_pendientes():
 # No hay sistema de migraciones en el proyecto (las tablas existentes se
 # crearon a mano). Estas se crean solas la primera vez que se usan, así no
 # hace falta correr SQL aparte.
+#
+# Aislamiento por sesión: en la demo pública, cada visitante registra sus
+# propios gastos sin verlos mezclados con los de otros visitantes ni con
+# los datos personales de Nico. sesion_id() calcula qué "cajón" usar:
+# siempre "nico" fuera de la demo (tu uso personal no cambia), y el id de
+# sesión que manda el frontend (guardado en localStorage del visitante)
+# dentro de la demo.
+def sesion_id(sesion_cruda=None):
+    if not DEMO:
+        return "nico"
+    sesion_cruda = (sesion_cruda or "").strip()
+    # Nunca confiar ciegamente en lo que manda el cliente: lo acotamos a
+    # algo corto y razonable para no guardar cualquier cosa en la columna.
+    return sesion_cruda[:100] if sesion_cruda else "anonimo"
+
+
+def ruta_grafico(sesion):
+    # Nombre de archivo derivado del id de sesión (hasheado, nunca el id
+    # crudo) para que cada visitante tenga su propio PNG y no pueda
+    # adivinar ni pisar el de otro escribiendo un id raro a mano.
+    hash_sesion = hashlib.sha256(sesion.encode("utf-8")).hexdigest()[:20]
+    return f"grafico_gastos_{hash_sesion}.png"
+
+
 def asegurar_tablas_finanzas(cursor):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS movimientos_financieros (
@@ -119,49 +144,83 @@ def asegurar_tablas_finanzas(cursor):
             descripcion TEXT NOT NULL,
             categoria TEXT,
             monto NUMERIC(12,2) NOT NULL,
-            fecha DATE NOT NULL DEFAULT CURRENT_DATE
+            fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+            sesion_id TEXT NOT NULL DEFAULT 'nico'
         );
     """)
+    cursor.execute("ALTER TABLE movimientos_financieros ADD COLUMN IF NOT EXISTS sesion_id TEXT NOT NULL DEFAULT 'nico';")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS presupuestos (
             id SERIAL PRIMARY KEY,
             mes TEXT NOT NULL,
             categoria TEXT NOT NULL,
             monto NUMERIC(12,2) NOT NULL,
-            UNIQUE (mes, categoria)
+            sesion_id TEXT NOT NULL DEFAULT 'nico'
         );
+    """)
+    cursor.execute("ALTER TABLE presupuestos ADD COLUMN IF NOT EXISTS sesion_id TEXT NOT NULL DEFAULT 'nico';")
+    # El UNIQUE original era (mes, categoria); si la tabla ya existía de
+    # antes hay que correrlo a (mes, categoria, sesion_id), si no cada
+    # sesión pisaría el presupuesto de las demás. Se busca cualquier
+    # constraint UNIQUE vieja en la tabla y se reemplaza por la nueva.
+    cursor.execute("""
+        DO $$
+        DECLARE
+            r RECORD;
+        BEGIN
+            FOR r IN
+                SELECT con.conname
+                FROM pg_constraint con
+                JOIN pg_class rel ON rel.oid = con.conrelid
+                WHERE rel.relname = 'presupuestos' AND con.contype = 'u'
+                  AND con.conname <> 'presupuestos_mes_categoria_sesion_key'
+            LOOP
+                EXECUTE format('ALTER TABLE presupuestos DROP CONSTRAINT %I', r.conname);
+            END LOOP;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint con
+                JOIN pg_class rel ON rel.oid = con.conrelid
+                WHERE rel.relname = 'presupuestos' AND con.conname = 'presupuestos_mes_categoria_sesion_key'
+            ) THEN
+                ALTER TABLE presupuestos
+                ADD CONSTRAINT presupuestos_mes_categoria_sesion_key UNIQUE (mes, categoria, sesion_id);
+            END IF;
+        END $$;
     """)
 
 
-def registrar_movimiento(tipo, descripcion, monto, categoria=None):
+def registrar_movimiento(tipo, descripcion, monto, categoria=None, sesion=""):
     conexion = conectar_db()
     cursor = conexion.cursor()
     asegurar_tablas_finanzas(cursor)
     cursor.execute(
-        "INSERT INTO movimientos_financieros (tipo, descripcion, categoria, monto) VALUES (%s, %s, %s, %s);",
-        (tipo, descripcion, categoria, monto),
+        "INSERT INTO movimientos_financieros (tipo, descripcion, categoria, monto, sesion_id) VALUES (%s, %s, %s, %s, %s);",
+        (tipo, descripcion, categoria, monto, sesion),
     )
     conexion.commit()
     cursor.close()
     conexion.close()
 
 
-def resumen_mes_actual():
+def resumen_mes_actual(sesion=""):
     conexion = conectar_db()
     cursor = conexion.cursor()
     asegurar_tablas_finanzas(cursor)
     cursor.execute("""
         SELECT categoria, SUM(monto) FROM movimientos_financieros
-        WHERE tipo = 'gasto' AND date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE)
+        WHERE tipo = 'gasto' AND sesion_id = %s
+          AND date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE)
         GROUP BY categoria
         ORDER BY SUM(monto) DESC;
-    """)
+    """, (sesion,))
     gastos_por_categoria = cursor.fetchall()
 
     cursor.execute("""
         SELECT COALESCE(SUM(monto), 0) FROM movimientos_financieros
-        WHERE tipo = 'ingreso' AND date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE);
-    """)
+        WHERE tipo = 'ingreso' AND sesion_id = %s
+          AND date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE);
+    """, (sesion,))
     total_ingresos = cursor.fetchone()[0]
 
     cursor.close()
@@ -171,7 +230,7 @@ def resumen_mes_actual():
     return gastos_por_categoria, total_gastos, total_ingresos
 
 
-def guardar_presupuesto(monto_total, reparto):
+def guardar_presupuesto(monto_total, reparto, sesion=""):
     # reparto: dict {categoria: monto}. Se guarda la fila 'TOTAL' con el
     # monto de referencia general, y una fila por cada categoría repartida.
     mes = date.today().strftime("%Y-%m")
@@ -179,25 +238,25 @@ def guardar_presupuesto(monto_total, reparto):
     cursor = conexion.cursor()
     asegurar_tablas_finanzas(cursor)
     cursor.execute("""
-        INSERT INTO presupuestos (mes, categoria, monto) VALUES (%s, 'TOTAL', %s)
-        ON CONFLICT (mes, categoria) DO UPDATE SET monto = EXCLUDED.monto;
-    """, (mes, monto_total))
+        INSERT INTO presupuestos (mes, categoria, monto, sesion_id) VALUES (%s, 'TOTAL', %s, %s)
+        ON CONFLICT (mes, categoria, sesion_id) DO UPDATE SET monto = EXCLUDED.monto;
+    """, (mes, monto_total, sesion))
     for categoria, monto in reparto.items():
         cursor.execute("""
-            INSERT INTO presupuestos (mes, categoria, monto) VALUES (%s, %s, %s)
-            ON CONFLICT (mes, categoria) DO UPDATE SET monto = EXCLUDED.monto;
-        """, (mes, categoria, monto))
+            INSERT INTO presupuestos (mes, categoria, monto, sesion_id) VALUES (%s, %s, %s, %s)
+            ON CONFLICT (mes, categoria, sesion_id) DO UPDATE SET monto = EXCLUDED.monto;
+        """, (mes, categoria, monto, sesion))
     conexion.commit()
     cursor.close()
     conexion.close()
 
 
-def obtener_presupuesto_mes_actual():
+def obtener_presupuesto_mes_actual(sesion=""):
     mes = date.today().strftime("%Y-%m")
     conexion = conectar_db()
     cursor = conexion.cursor()
     asegurar_tablas_finanzas(cursor)
-    cursor.execute("SELECT categoria, monto FROM presupuestos WHERE mes = %s;", (mes,))
+    cursor.execute("SELECT categoria, monto FROM presupuestos WHERE mes = %s AND sesion_id = %s;", (mes, sesion))
     filas = cursor.fetchall()
     cursor.close()
     conexion.close()
@@ -211,12 +270,12 @@ def formatear_pesos(monto):
     return f"{float(monto):,.0f}".replace(",", ".")
 
 
-def generar_grafico_gastos():
+def generar_grafico_gastos(sesion=""):
     import matplotlib
     matplotlib.use("Agg")  # sin pantalla, solo generar el archivo
     import matplotlib.pyplot as plt
 
-    gastos_por_categoria, _total_gastos, _total_ingresos = resumen_mes_actual()
+    gastos_por_categoria, _total_gastos, _total_ingresos = resumen_mes_actual(sesion)
 
     if not gastos_por_categoria:
         return False
@@ -228,7 +287,7 @@ def generar_grafico_gastos():
     plt.pie(montos, labels=categorias, autopct="%1.0f%%")
     plt.title("Gastos de " + date.today().strftime("%B %Y"))
     plt.tight_layout()
-    plt.savefig("grafico_gastos.png")
+    plt.savefig(ruta_grafico(sesion))
     plt.close()
     return True
 
@@ -404,7 +463,7 @@ HERRAMIENTAS_FINANZAS = [
 TOOL_HERRAMIENTAS = types.Tool(function_declarations=HERRAMIENTAS_EVENTOS + HERRAMIENTAS_FINANZAS)
 
 
-def ejecutar_herramienta(llamada):
+def ejecutar_herramienta(llamada, sesion=""):
     if llamada.name == "agendar_evento":
         descripcion = (llamada.args.get("descripcion") or "").strip()
         fecha = (llamada.args.get("fecha") or "").strip()
@@ -426,9 +485,6 @@ def ejecutar_herramienta(llamada):
         items = ", ".join(f"{descripcion} (el {fecha})" for _id, descripcion, fecha in filas)
         return f"Tenés pendiente: {items}.", False
 
-    if llamada.name in NOMBRES_HERRAMIENTAS_FINANZAS and DEMO:
-        return "Esa función solo está disponible en mi versión personal, no acá en la demo pública. Pero puedo charlar con vos o agendarte un recordatorio, por ejemplo.", False
-
     if llamada.name == "registrar_movimiento":
         tipo = (llamada.args.get("tipo") or "").strip().lower()
         descripcion = (llamada.args.get("descripcion") or "").strip()
@@ -437,7 +493,7 @@ def ejecutar_herramienta(llamada):
         if categoria:
             categoria = categoria.strip()
         try:
-            registrar_movimiento(tipo, descripcion, monto, categoria if tipo == "gasto" else None)
+            registrar_movimiento(tipo, descripcion, monto, categoria if tipo == "gasto" else None, sesion)
             if tipo == "ingreso":
                 return f"Listo, registré el ingreso: {descripcion} por ${formatear_pesos(monto)}.", False
             return f"Listo, registré el gasto: {descripcion} (${formatear_pesos(monto)}) en {categoria or 'Sin categoría'}.", False
@@ -447,8 +503,8 @@ def ejecutar_herramienta(llamada):
 
     if llamada.name == "consultar_resumen_financiero":
         try:
-            gastos_por_categoria, total_gastos, total_ingresos = resumen_mes_actual()
-            presupuesto = obtener_presupuesto_mes_actual()
+            gastos_por_categoria, total_gastos, total_ingresos = resumen_mes_actual(sesion)
+            presupuesto = obtener_presupuesto_mes_actual(sesion)
         except Exception as e:
             print("Error consultando resumen financiero:", e)
             return "Perdón, no pude revisar tus finanzas ahora.", False
@@ -487,7 +543,7 @@ def ejecutar_herramienta(llamada):
         monto_total = llamada.args.get("monto_total")
         reparto = llamada.args.get("reparto") or {}
         try:
-            guardar_presupuesto(monto_total, reparto)
+            guardar_presupuesto(monto_total, reparto, sesion)
             detalle = ", ".join(f"{c}: ${formatear_pesos(m)}" for c, m in reparto.items())
             return f"Listo, guardé tu presupuesto: ${formatear_pesos(monto_total)} en total este mes, repartido así: {detalle}.", False
         except Exception as e:
@@ -496,7 +552,7 @@ def ejecutar_herramienta(llamada):
 
     if llamada.name == "generar_grafico_gastos":
         try:
-            hay_datos = generar_grafico_gastos()
+            hay_datos = generar_grafico_gastos(sesion)
         except Exception as e:
             print("Error generando gráfico:", e)
             return "Perdón, no pude armar el gráfico ahora.", False
@@ -785,7 +841,7 @@ RESPUESTA_SALUDO_MENU = (
 )
 
 
-def procesar_texto(texto, historial="", es_primera=False):
+def procesar_texto(texto, historial="", es_primera=False, sesion_cruda=""):
     print("Procesando:", texto)
 
     if es_primera and es_saludo_generico(texto):
@@ -797,7 +853,7 @@ def procesar_texto(texto, historial="", es_primera=False):
 
     if llamada:
         print("Herramienta elegida:", llamada.name, llamada.args)
-        frase, hay_grafico = ejecutar_herramienta(llamada)
+        frase, hay_grafico = ejecutar_herramienta(llamada, sesion_id(sesion_cruda))
         return frase, hay_grafico, False
 
     intencion = (respuesta_clasificacion.text or "").strip().upper()
@@ -886,17 +942,20 @@ def texto():
     mensaje = request.form["texto"]
     historial = request.form.get("historial", "")
     es_primera = request.form.get("primera", "") == "true"
+    sesion_cruda = request.form.get("sesion", "")
     print("Texto recibido:", mensaje)
 
-    frase, hay_grafico, mostrar_menu = procesar_texto(mensaje, historial, es_primera)
+    frase, hay_grafico, mostrar_menu = procesar_texto(mensaje, historial, es_primera, sesion_cruda)
     return armar_respuesta(frase, hay_grafico, mostrar_menu)
 
 
 @app.route("/grafico", methods=["GET"])
 def grafico():
-    if not os.path.exists("grafico_gastos.png"):
+    sesion = sesion_id(request.args.get("sesion", ""))
+    ruta = ruta_grafico(sesion)
+    if not os.path.exists(ruta):
         return {"error": "Todavía no se generó ningún gráfico."}, 404
-    return send_file("grafico_gastos.png", mimetype="image/png")
+    return send_file(ruta, mimetype="image/png")
 
 @app.route("/guardar_conversacion", methods=["POST"])
 def endpoint_guardar_conversacion():
