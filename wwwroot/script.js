@@ -6,6 +6,7 @@ let conversacionIniciada = false;
 let historial = [];
 let intervaloPasos = null;
 let burbujaCargando = null;
+let modoDemo = false;
 
 const escenario = document.getElementById("escenario");
 const conversacion = document.getElementById("conversacion");
@@ -16,6 +17,7 @@ const campoTexto = document.getElementById("campo-texto");
 const botonMute = document.getElementById("boton-mute");
 const menu = document.getElementById("menu-lateral");
 const overlay = document.getElementById("overlay");
+const menuOpciones = document.getElementById("menu-opciones");
 const SERVIDOR = window.location.origin;
 
 // ---------- MENÚ ----------
@@ -52,6 +54,7 @@ async function nuevaConversacion() {
     escenario.classList.remove("conversando");
     escenario.classList.add("inicio");
     estado.textContent = "Escribí o tocá el micrófono para empezar";
+    ocultarMenuOpciones();
     cerrarMenu();
 }
 
@@ -91,6 +94,7 @@ async function abrirConversacion(id) {
         conversacion.innerHTML = "";
         historial = [];
         conversacionIniciada = false;
+        ocultarMenuOpciones();
 
         mensajes.forEach(msg => {
             if (msg.rol === "Nico") {
@@ -230,17 +234,24 @@ function scrollAbajo() {
 }
 
 // ---------- ENVIAR TEXTO ----------
-async function enviarTexto() {
-    const texto = campoTexto.value.trim();
+// Si se le pasa textoForzado (por ejemplo al tocar una opción del menú de
+// bienvenida), se manda ese texto en vez de leer el campo de escritura.
+async function enviarTexto(textoForzado) {
+    const esForzado = typeof textoForzado === "string";
+    const texto = (esForzado ? textoForzado : campoTexto.value).trim();
     if (texto === "") return;
-    campoTexto.value = "";
-    campoTexto.style.height = "auto";
+    const eraPrimera = historial.length === 0;
+    if (!esForzado) {
+        campoTexto.value = "";
+        campoTexto.style.height = "auto";
+    }
+    ocultarMenuOpciones();
     agregarMensajeNico(texto);
     iniciarPasos(texto);
 
-
     const formData = new FormData();
     formData.append("texto", texto);
+    formData.append("primera", eraPrimera ? "true" : "false");
     try {
         const res = await fetch(SERVIDOR + "/texto", { method: "POST", body: formData });
 
@@ -279,12 +290,83 @@ function agregarGraficoEdith() {
     scrollAbajo();
 }
 
+// ---------- MENÚ DE BIENVENIDA (opciones tipo encuesta) ----------
+// Edith lo muestra cuando el primer mensaje de la charla es un saludo
+// genérico ("hola", "qué tal"), para ofrecer opciones en vez de quedarse
+// esperando que el usuario adivine qué puede pedirle. Si en cambio arranca
+// con algo puntual ("cómo sale la selección"), el backend no manda el menú
+// y esto nunca se llama. Va como panel fijo arriba del campo de texto, no
+// como un mensaje más del chat.
+function ocultarMenuOpciones() {
+    if (!menuOpciones) return;
+    menuOpciones.hidden = true;
+    menuOpciones.innerHTML = "";
+}
+
+function mostrarMenuOpciones() {
+    if (!menuOpciones) return;
+
+    const grupos = [
+        {
+            titulo: "💼 Trabajo",
+            opciones: [
+                ["Organizame las tareas", "Ayudame a organizar mis tareas de laburo"],
+                ["Ayuda con un Excel", "Ayudame a ordenar un archivo de Excel"],
+            ],
+        },
+        {
+            titulo: "🏠 Personal",
+            opciones: modoDemo
+                ? [["Mis finanzas", "Quiero ver cómo vienen mis finanzas personales"]]
+                : [
+                    ["Mis finanzas", "Quiero ver cómo vienen mis finanzas personales"],
+                    ["Poné música", "Poneme música"],
+                    ["Buscar en Netflix", "Buscá algo en Netflix"],
+                ],
+        },
+    ];
+
+    menuOpciones.innerHTML = "";
+
+    grupos.forEach(grupo => {
+        const contenedorGrupo = document.createElement("div");
+        contenedorGrupo.className = "grupo-opciones";
+
+        const titulo = document.createElement("div");
+        titulo.className = "grupo-titulo";
+        titulo.textContent = grupo.titulo;
+        contenedorGrupo.appendChild(titulo);
+
+        const fila = document.createElement("div");
+        fila.className = "fila-chips";
+        grupo.opciones.forEach(([etiqueta, mensaje]) => {
+            const boton = document.createElement("button");
+            boton.type = "button";
+            boton.className = "chip-opcion";
+            boton.textContent = etiqueta;
+            boton.addEventListener("click", () => enviarTexto(mensaje));
+            fila.appendChild(boton);
+        });
+        contenedorGrupo.appendChild(fila);
+        menuOpciones.appendChild(contenedorGrupo);
+    });
+
+    const nota = document.createElement("div");
+    nota.className = "menu-nota";
+    nota.textContent = "O escribime directamente lo que necesites.";
+    menuOpciones.appendChild(nota);
+
+    menuOpciones.hidden = false;
+}
+
 async function procesarRespuesta(res) {
     const textoRespuesta = decodeURIComponent(res.headers.get("X-Respuesta-Texto") || "");
     const hayGrafico = res.headers.get("X-Hay-Grafico") === "true";
+    const hayMenu = res.headers.get("X-Mostrar-Menu") === "true";
     detenerPasos();
     agregarMensajeEdith(textoRespuesta);
     if (hayGrafico) agregarGraficoEdith();
+    if (hayMenu) mostrarMenuOpciones();
 
     if (!muteado) {
         const audioBlob = await res.blob();
@@ -376,6 +458,7 @@ async function consultarSalud() {
 const capacidades = document.getElementById("capacidades");
 
 function mostrarCapacidades(esDemo) {
+    modoDemo = !!esDemo;
     if (!capacidades) return;
     capacidades.textContent = esDemo
         ? "Puedo recordarte eventos o simplemente charlar — Spotify y Netflix están desactivados en esta demo pública."
