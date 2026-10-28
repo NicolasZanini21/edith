@@ -20,6 +20,29 @@ const overlay = document.getElementById("overlay");
 const menuOpciones = document.getElementById("menu-opciones");
 const SERVIDOR = window.location.origin;
 
+// ---------- SESIÓN DEL VISITANTE (demo pública) ----------
+// Id propio por visitante para que, en la demo pública, cada uno vea sus
+// propios gastos y su propio gráfico sin mezclarse con los de otra
+// persona ni con los datos personales de Nico. En localStorage para que
+// sobreviva a un refresh; si el navegador lo bloquea (modo privado,
+// etc.) se usa uno en memoria que dura mientras esté la pestaña abierta.
+function obtenerSesionVisitante() {
+    try {
+        let id = localStorage.getItem("edith_sesion");
+        if (!id) {
+            id = crypto.randomUUID();
+            localStorage.setItem("edith_sesion", id);
+        }
+        return id;
+    } catch (err) {
+        if (!window._edithSesionMemoria) {
+            window._edithSesionMemoria = crypto.randomUUID();
+        }
+        return window._edithSesionMemoria;
+    }
+}
+const SESION_VISITANTE = obtenerSesionVisitante();
+
 // ---------- MENÚ ----------
 function abrirMenu() {
     menu.classList.add("abierto");
@@ -252,6 +275,7 @@ async function enviarTexto(textoForzado) {
     const formData = new FormData();
     formData.append("texto", texto);
     formData.append("primera", eraPrimera ? "true" : "false");
+    formData.append("sesion", SESION_VISITANTE);
     try {
         const res = await fetch(SERVIDOR + "/texto", { method: "POST", body: formData });
 
@@ -284,7 +308,7 @@ function agregarGraficoEdith() {
     const img = document.createElement("img");
     img.className = "grafico-chat";
     img.alt = "Gráfico de gastos";
-    img.src = SERVIDOR + "/grafico?t=" + Date.now(); // evita servir una imagen vieja cacheada
+    img.src = SERVIDOR + "/grafico?sesion=" + encodeURIComponent(SESION_VISITANTE) + "&t=" + Date.now(); // evita servir una imagen vieja cacheada
     div.appendChild(img);
     conversacion.appendChild(div);
     scrollAbajo();
@@ -461,7 +485,7 @@ function mostrarCapacidades(esDemo) {
     modoDemo = !!esDemo;
     if (!capacidades) return;
     capacidades.textContent = esDemo
-        ? "Puedo recordarte eventos o simplemente charlar — Spotify y Netflix están desactivados en esta demo pública."
+        ? "Puedo recordarte eventos, llevarte un registro de gastos e ingresos con gráfico, o simplemente charlar — Spotify y Netflix están desactivados en esta demo pública."
         : "Puedo poner música en Spotify, buscarte algo en Netflix, recordarte eventos o simplemente charlar.";
 }
 
