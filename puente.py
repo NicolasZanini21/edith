@@ -132,8 +132,11 @@ def ruta_grafico(sesion):
     # Nombre de archivo derivado del id de sesión (hasheado, nunca el id
     # crudo) para que cada visitante tenga su propio PNG y no pueda
     # adivinar ni pisar el de otro escribiendo un id raro a mano.
+    # Se guarda en /tmp: en contenedores (como el de la demo en Render) es
+    # el único directorio que siempre está garantizado como escribible,
+    # a diferencia del directorio de la app.
     hash_sesion = hashlib.sha256(sesion.encode("utf-8")).hexdigest()[:20]
-    return f"grafico_gastos_{hash_sesion}.png"
+    return os.path.join("/tmp", f"grafico_gastos_{hash_sesion}.png")
 
 
 def asegurar_tablas_finanzas(cursor):
@@ -271,6 +274,14 @@ def formatear_pesos(monto):
 
 
 def generar_grafico_gastos(sesion=""):
+    # matplotlib intenta armar su caché de fuentes en una carpeta derivada
+    # de HOME la primera vez que se usa. En contenedores esa carpeta puede
+    # no existir o no ser escribible, y eso tira una excepción silenciosa
+    # la primera vez que se pide un gráfico. Forzamos /tmp, que siempre es
+    # escribible, antes de importar matplotlib.
+    os.environ.setdefault("MPLCONFIGDIR", "/tmp/mplconfig")
+    os.makedirs(os.environ["MPLCONFIGDIR"], exist_ok=True)
+
     import matplotlib
     matplotlib.use("Agg")  # sin pantalla, solo generar el archivo
     import matplotlib.pyplot as plt
@@ -554,7 +565,9 @@ def ejecutar_herramienta(llamada, sesion=""):
         try:
             hay_datos = generar_grafico_gastos(sesion)
         except Exception as e:
+            import traceback
             print("Error generando gráfico:", e)
+            traceback.print_exc()
             return "Perdón, no pude armar el gráfico ahora.", False
         if not hay_datos:
             return "Todavía no tenés gastos registrados este mes para graficar.", False
