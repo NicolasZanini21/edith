@@ -22,7 +22,17 @@ if (app.Environment.IsDevelopment())
 //app.UseHttpsRedirection();
 
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    // Forzar que el navegador siempre revalide (no confiar en el cacheo
+    // heurístico por Last-Modified): sin esto, visitantes que ya habían
+    // pasado por el sitio se quedan sirviendo script.js/estilos.css viejos
+    // durante días aunque hagamos un deploy nuevo.
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers["Cache-Control"] = "no-cache";
+    }
+});
 
 // Rutas que resuelve el puente Flask
 string[] rutasPuente = { "texto", "escuchar", "conversaciones", "conversacion", "guardar_conversacion", "salud", "grafico" };
